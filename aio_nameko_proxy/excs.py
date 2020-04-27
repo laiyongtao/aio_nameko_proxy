@@ -3,6 +3,8 @@
 class ConfigError(Exception):
     pass
 
+class ClientError(Exception):
+    pass
 
 class RemoteError(Exception):
     """ Exception to raise at the caller if an exception occurred in the

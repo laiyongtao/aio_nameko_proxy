@@ -1,8 +1,9 @@
 # coding=utf-8
+import sys
 import uuid
 import json
 import asyncio
-import sys
+from functools import partial
 from aio_pika import (connect_robust,
                       Message,
                       ExchangeType,
