@@ -1,1 +1,2 @@
 aio-pika==6.6.0
+aiotask-context==0.6.1

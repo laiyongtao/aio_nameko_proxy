@@ -3,7 +3,7 @@ import sys
 import uuid
 import json
 import asyncio
-from functools import partial
+
 from aio_pika import (connect_robust,
                       Message,
                       ExchangeType,
@@ -11,38 +11,97 @@ from aio_pika import (connect_robust,
 
 from .excs import ConfigError, deserialize
 from .constants import *
+from .pool import ProxyPool
+
+
+class AIOPooledClusterRpcProxy(object):
+    _pool = None
+    _closed = False
+    def __init__(self, config, loop=None):
+        if not config:
+            raise ConfigError("Please provide config dict")
+        self.parse_config(config)
+        self.loop = loop
+
+    def parse_config(self, config):
+        self.pool_size = config.pop("pool_size", 5)
+        self.initial_size = config.pop("initial_size", 2)
+        self.con_time_out = config.get('con_time_out', None)
+
+        self._config = config.copy()
+
+    async def init_pool(self):
+        self._pool = ProxyPool(self._make_rpc_proxy,
+                               pool_size=self.pool_size,
+                               initial_size=self.initial_size,
+                               loop=self.loop,
+                               time_out=self.con_time_out)
+        await self._pool.init_proxies()
+
+    async def _make_rpc_proxy(self):
+        cluster_rpc = AIOClusterRpcProxy(config=self._config)
+        return await cluster_rpc.start()
+
+    async def get_proxy(self):
+        if not self._pool:
+            raise ConfigError("Please inie your cluster")
+        return await self._pool.get_proxy()
+
+    def release_proxy(self, proxy):
+        if isinstance(proxy, AIOClusterRpcProxy):
+            self._pool.release_proxy(proxy)
+
+    async def close(self):
+        self._closed = True
+        await asyncio.shield(self._pool.close())
+
+    async def __aenter__(self):
+        if self._pool is None:
+            await self.init_pool()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._closed:
+            return
+        await self.close()
+
+    def acquire(self):
+        return self._pool.acquire()
 
 
 class AIOClusterRpcProxy(object):
 
-    def __init__(self, config, loop=None, *, time_out=None, con_time_out=None, **options):
+    def __init__(self, config, loop=None):
         if not config:
-            raise
+            raise ConfigError("Please provide config dict")
         self.parse_config(config)
-        self.virtual_service_name = "aio_rpc_proxy"
         if not loop:
             loop = asyncio.get_event_loop()
         self.loop = loop
-        self.options = options
+        self.virtual_service_name = "aio_rpc_proxy"
         self.connection = None
-        self._time_out = time_out or DEFAULT_TIMEOUT
-        self._con_time_out = con_time_out or DEFAULT_CON_TIMEOUT
         self._proxies = {}
+
         self.reply_listener = ReplyListener(self, time_out=self._con_time_out)
-        self._proxies = {}
 
     def parse_config(self, config):
         if not isinstance(config, dict):
             raise ConfigError("config must be an instance of dict!")
-        amqp_uri = config.get("AMQP_URI")
+
+        self._config = config
+        _config = config.copy()
+
+        amqp_uri = _config.pop("AMQP_URI", None)
         if not amqp_uri:
             raise ConfigError('Can not find config key named the "AMQP_URI"')
 
-        self._config = config
-
         self.amqp_uri = amqp_uri
 
-        self._exchange_name = config.get(RPC_EXCHANGE_CONFIG_KEY, RPC_EXCHANGE_NAME)
+        self._exchange_name = _config.pop(RPC_EXCHANGE_CONFIG_KEY, RPC_EXCHANGE_NAME)
+
+        self._time_out = _config.pop('time_out', DEFAULT_TIMEOUT)
+        self._con_time_out = _config.pop('con_time_out', DEFAULT_CON_TIMEOUT)
+        self.options = _config
 
     async def _connect(self):
         self.connection = await connect_robust(self.amqp_uri, loop=self.loop, timeout=self._con_time_out)
@@ -154,7 +213,6 @@ class ServiceProxy(object):
         self._proxies = {}
 
     def __getattr__(self, name):
-        print(self._proxies)
         if name not in self._proxies:
             self._proxies[name] = MethodProxy(self.service_name,
                                               name,
@@ -248,7 +306,6 @@ class MethodProxy(object):
     def _switch_delivery_mode(self, delivery_mode):
         '''switch from the default delivery_mode to another'''
         if delivery_mode == DeliveryMode.NOT_PERSISTENT:
-            print(True)
             return DeliveryMode.PERSISTENT
         else:
             return DeliveryMode.NOT_PERSISTENT
