@@ -1,0 +1,4 @@
+include READMD.md
+include LICENSE
+
+global-exclude *.pyc

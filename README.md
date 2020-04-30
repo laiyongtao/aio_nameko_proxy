@@ -1,13 +1,13 @@
 # aio-nameko-proxy
 
-A standalone nameko rpc proxy for asyncio and a wrapper for using nameko services with Sanic. 
+A standalone nameko rpc proxy for asyncio and a wrapper for using nameko rpc proxy with Sanic. 
 
 This project is based on aio-pika and reference the source code of official nameko project and aio-pika.
 
 ### examples:
 #### standalone AIOClusterRpcProxy
 If you want most of your messages to be persistent(default). Set the delivery mode parameter as
-DeliveryMode.PERSISTENT. Call sw_dlm_call when you need to send a non-persistent message.
+DeliveryMode.PERSISTENT, Call sw_dlm_call when you need to send a non-persistent message.
 ```python
 import asyncio
 from aio_nameko_proxy import AIOClusterRpcProxy
@@ -47,7 +47,7 @@ if __name__ == '__main__':
 ```
 
 If you want most of your messages to be non-persistent(persistent is default). Set the delivery mode parameter as
-DeliveryMode.NOT_PERSISTENT. Call sw_dlm_call when you need to send a persistent message.
+DeliveryMode.NOT_PERSISTENT, Call sw_dlm_call when you need to send a persistent message.
 ```python
 import asyncio
 from aio_nameko_proxy import AIOClusterRpcProxy
