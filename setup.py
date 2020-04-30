@@ -14,6 +14,7 @@ setup(
     version="0.1.0",
     author="laiyongtao",
     author_email="laiyongtao6908@163.com",
+    url="https://github.com/laiyongtao/aio_nameko_proxy" ,
     license="Apache License, Version 2.0",
     description=desc,
     long_description=long_desc,
