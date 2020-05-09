@@ -25,6 +25,10 @@ class SanicNamekoClusterRpcProxy(AIOPooledClusterRpcProxy):
         self.parse_config(config)
 
         @app.listener('after_server_start')
+        async def _set_aiotask_factory(app, loop):
+            loop.set_task_factory(ctx.task_factory)
+
+        @app.listener('after_server_start')
         async def _init_proxy_pool(app, loop):
             self.loop = loop
             await self.init_pool()
