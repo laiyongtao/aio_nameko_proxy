@@ -11,7 +11,7 @@ desc = '''A standalone nameko rpc proxy for asyncio and a wrapper for using name
 
 setup(
     name="aio-nameko-proxy",
-    version="0.1.0",
+    version="1.0.0",
     author="laiyongtao",
     author_email="laiyongtao6908@163.com",
     url="https://github.com/laiyongtao/aio_nameko_proxy" ,
@@ -28,6 +28,7 @@ setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
     ],
+    keywords = ("nameko", "sanic", "asyncio", "rpc"),
     packages=find_packages(exclude=["demos"]),
     install_requires=[
         "aio-pika>=6.6.0",
