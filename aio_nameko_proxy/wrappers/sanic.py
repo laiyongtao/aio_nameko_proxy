@@ -3,7 +3,7 @@ from __future__ import absolute_import
 import re
 import aiotask_context as ctx
 from aio_nameko_proxy import AIOPooledClusterRpcProxy
-
+from aio_nameko_proxy.constants import CAPITAL_CONFIG_KEYS
 
 class SanicNamekoClusterRpcProxy(AIOPooledClusterRpcProxy):
 
@@ -17,7 +17,7 @@ class SanicNamekoClusterRpcProxy(AIOPooledClusterRpcProxy):
             match = re.match(r"NAMEKO_(?P<name>.*)", k)
             if match:
                 name = match.group("name")
-                if name == "AMQP_URI":
+                if name in CAPITAL_CONFIG_KEYS:
                     config[name] = v
                     continue
                 name = name.lower()

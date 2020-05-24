@@ -4,10 +4,13 @@ import uuid
 import json
 import asyncio
 
+import aiormq
 from aio_pika import (connect_robust,
                       Message,
                       ExchangeType,
                       DeliveryMode)
+from nameko.serialization import setup as serialization_setup
+from kombu.serialization import loads, dumps
 
 from .excs import ConfigError, deserialize
 from .constants import *
@@ -17,6 +20,7 @@ from .pool import ProxyPool
 class AIOPooledClusterRpcProxy(object):
     _pool = None
     _closed = False
+
     def __init__(self, config, loop=None):
         if not config:
             raise ConfigError("Please provide config dict")
@@ -96,6 +100,8 @@ class AIOClusterRpcProxy(object):
             raise ConfigError('Can not find config key named the "AMQP_URI"')
 
         self.amqp_uri = amqp_uri
+
+        self.serializer, self.accept = serialization_setup(_config)
 
         self._exchange_name = _config.pop(RPC_EXCHANGE_CONFIG_KEY, RPC_EXCHANGE_NAME)
 
@@ -185,13 +191,16 @@ class ReplyListener(object):
     async def handle_message(self, message):
         message.ack()
 
-        correlation_id = message.properties.correlation_id
+        correlation_id = message.correlation_id
         future = self._reply_futures.pop(correlation_id, None)
 
         if future is not None:
             try:
                 try:
-                    body = json.loads(message.body)
+                    body = loads(message.body,
+                                 content_type=message.content_type,
+                                 content_encoding=message.content_encoding,
+                                 accept=self.cluster_proxy.accept)
                 except Exception as e:
                     future.set_exception(e)
                 else:
@@ -245,6 +254,7 @@ class MethodProxy(object):
 
     def __init__(self, service_name, method_name, cluster_proxy, time_out=None, con_time_out=None,
                  **options):
+        self.cluster_proxy = cluster_proxy
         self.service_name = service_name
         self.method_name = method_name
         self.options = self._set_default_options(options)
@@ -255,7 +265,15 @@ class MethodProxy(object):
         self.publisher = Publisher(self.exchange)
 
     def _set_default_options(self, options):
-        _options = options.copy()
+        _options = dict()
+        for k, v in options:
+            if (
+                    k not in aiormq.spec.Basic.Properties.__slots__ or
+                    k == "reply_to" or k == "correlation_id" or
+                    k == "content_encoding" or k == "content_type"
+            ):
+                continue
+            _options.update({k: v})
         _options.setdefault("delivery_mode", DeliveryMode.PERSISTENT)
         # other options default set ...
         return _options
@@ -279,19 +297,28 @@ class MethodProxy(object):
         reply = await self._call(*args, **kwargs)
         return await reply.result()
 
-    async def _call(self, *args, **kwargs):
-        payload = {"args": args, "kwargs": kwargs}
-        body = json.dumps(payload).encode("utf-8")
+    def make_msg(self, payload, options):
+
         reply_to = self.reply_listener.routing_key
         correlation_id = str(uuid.uuid4())
 
+        serializer = self.cluster_proxy.serializer
+        content_type, content_encoding, body = dumps(payload, serializer)
         msg = Message(
             body,
-            content_type="application/json",
+            content_type=content_type,
+            content_encoding=content_encoding,
             reply_to=reply_to,
             correlation_id=correlation_id,
-            **self.options
+            **options
         )
+        return msg
+
+    async def _call(self, *args, **kwargs):
+
+        payload = {"args": args, "kwargs": kwargs}
+        msg = self.make_msg(payload, options=self.options)
+
         return await self._publish(msg)
 
     async def sw_dlm_call(self, *args, **kwargs):
@@ -317,15 +344,6 @@ class MethodProxy(object):
         options.update(delivery_mode=delivery_mode)
 
         payload = {"args": args, "kwargs": kwargs}
-        body = json.dumps(payload).encode("utf-8")
-        reply_to = self.reply_listener.routing_key
-        correlation_id = str(uuid.uuid4())
+        msg = self.make_msg(payload, options=options)
 
-        msg = Message(
-            body,
-            content_type="application/json",
-            reply_to=reply_to,
-            correlation_id=correlation_id,
-            **options
-        )
         return await self._publish(msg)
