@@ -33,6 +33,7 @@ setup(
     install_requires=[
         "aio-pika>=6.6.0",
         "aiotask-context>=0.6.1",
+        "nameko==2.12.0"
     ],
     python_requires=">3.5.*, <4",
 )
