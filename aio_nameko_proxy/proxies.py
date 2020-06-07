@@ -1,7 +1,6 @@
 # coding=utf-8
 import sys
 import uuid
-import json
 import asyncio
 
 import aiormq
@@ -10,7 +9,7 @@ from aio_pika import (connect_robust,
                       ExchangeType,
                       DeliveryMode)
 from nameko.serialization import setup as serialization_setup
-from kombu.serialization import loads, dumps
+from kombu.serialization import loads, dumps, prepare_accept_content
 
 from .excs import ConfigError, deserialize
 from .constants import *
@@ -197,10 +196,11 @@ class ReplyListener(object):
         if future is not None:
             try:
                 try:
+                    accept = self.accept = prepare_accept_content(self.cluster_proxy.accept)
                     body = loads(message.body,
                                  content_type=message.content_type,
                                  content_encoding=message.content_encoding,
-                                 accept=self.cluster_proxy.accept)
+                                 accept=accept)
                 except Exception as e:
                     future.set_exception(e)
                 else:
@@ -266,7 +266,7 @@ class MethodProxy(object):
 
     def _set_default_options(self, options):
         _options = dict()
-        for k, v in options:
+        for k, v in options.items():
             if (
                     k not in aiormq.spec.Basic.Properties.__slots__ or
                     k == "reply_to" or k == "correlation_id" or
@@ -304,6 +304,8 @@ class MethodProxy(object):
 
         serializer = self.cluster_proxy.serializer
         content_type, content_encoding, body = dumps(payload, serializer)
+        if isinstance(body, str): body = bytes(body, content_encoding)
+        print(type(body))
         msg = Message(
             body,
             content_type=content_type,

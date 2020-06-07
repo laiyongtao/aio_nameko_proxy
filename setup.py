@@ -1,9 +1,9 @@
 import os
 from setuptools import setup, find_packages
 
-Dir = os.path.abspath(os.path.dirname(__file__))
+DIR = os.path.abspath(os.path.dirname(__file__))
 
-with open(os.path.join(Dir, "README.md")) as f:
+with open(os.path.join(DIR, "README.md")) as f:
     long_desc = f.read()
 
 desc = '''A standalone nameko rpc proxy for asyncio and a wrapper for using nameko rpc proxy with Sanic. '''
@@ -11,7 +11,7 @@ desc = '''A standalone nameko rpc proxy for asyncio and a wrapper for using name
 
 setup(
     name="aio-nameko-proxy",
-    version="1.0.0",
+    version="1.1.0",
     author="laiyongtao",
     author_email="laiyongtao6908@163.com",
     url="https://github.com/laiyongtao/aio_nameko_proxy" ,

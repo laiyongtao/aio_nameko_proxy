@@ -18,7 +18,17 @@ config = {
     "rpc_exchange": "nameko-rpc",
     "time_out": 30, 
     "con_time_out": 5, 
-    "delivery_mode": DeliveryMode.PERSISTENT
+    "delivery_mode": DeliveryMode.PERSISTENT,
+    "serializer": "my_serializer",
+    "ACCEPT": ["pickle", "json", "my_serializer"],
+    "SERIALIZERS": {
+            "my_serializer": {
+                "encoder": "my_slizer.dumps",
+                "decoder": "my_slizer.loads",
+                "content_type": "my-content-type",
+                "content_encoding": "utf-8"
+            }
+        }
 }
 
 async def run():
@@ -131,6 +141,11 @@ class Config(object):
     NAMEKO_TIME_OUT = 30
     # con_time_out
     NAMEKO_CON_TIME_OUT = 5
+    # serializer
+    NAMEKO_SERIALIZER = "json"
+    # 
+    NAMEKO_ACCEPT = ["pickle", "json"]
+
     # delivery_mode
     NAMEKO_DELIVERY_MODE = DeliveryMode.PERSISTENT
     # other supported properties of aio-pika.Message, the key name format is "NAMEKO_{}".format(property_name.upper())

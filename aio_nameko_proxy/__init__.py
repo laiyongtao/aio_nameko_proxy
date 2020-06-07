@@ -5,5 +5,5 @@ from .proxies import AIOClusterRpcProxy, AIOPooledClusterRpcProxy
 
 __author__ = "laiyongtao <laiyongtao6908@163.com>"
 
-version_info = (1, 0, 0)
+version_info = (1, 1, 0)
 __version__ = ".".join(map(str, version_info))

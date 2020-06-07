@@ -6,17 +6,15 @@ from aio_pika.pool import PoolInvalidStateError, ConstructorType
 from typing import Union, AsyncContextManager
 from .excs import ClientError
 
-
 NumType = Union[int, float]
 
 
 class ProxyPool(object):
-
     _inited = False
-    def __init__(self, proxy_factory: ConstructorType,
-                 pool_size: int = None, initial_size: int = None, time_out: NumType =None,
-                 loop: asyncio.AbstractEventLoop = None):
 
+    def __init__(self, proxy_factory: ConstructorType,
+                 pool_size: int = None, initial_size: int = None, time_out: NumType = None,
+                 loop: asyncio.AbstractEventLoop = None):
         self.loop = loop or asyncio.get_event_loop()
         # if the origin proxy_factory need some args, you can use functools.partial or functools.partialmethod
         self._proxy_factory = proxy_factory
@@ -81,7 +79,6 @@ class ProxyPool(object):
         if self._closed:
             raise PoolInvalidStateError('put proxy operation on closed pool')
         self._free_proxies.put_nowait(proxy)
-
 
     async def close(self):
         async with self._lock:
