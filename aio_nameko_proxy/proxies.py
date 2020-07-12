@@ -2,8 +2,11 @@
 import sys
 import uuid
 import asyncio
+import ssl
+from enum import Enum
 
 import aiormq
+from yarl import URL
 from aio_pika import (connect_robust,
                       Message,
                       ExchangeType,
@@ -98,7 +101,7 @@ class AIOClusterRpcProxy(object):
         if not amqp_uri:
             raise ConfigError('Can not find config key named the "AMQP_URI"')
 
-        self.amqp_uri = amqp_uri
+        self.url = URL(amqp_uri)
 
         self.serializer, self.accept = serialization_setup(_config)
 
@@ -106,10 +109,35 @@ class AIOClusterRpcProxy(object):
 
         self._time_out = _config.pop('time_out', DEFAULT_TIMEOUT)
         self._con_time_out = _config.pop('con_time_out', DEFAULT_CON_TIMEOUT)
+        self.ssl_options = _config.pop(AMQP_SSL_CONFIG_KEY, {})
         self.options = _config
 
     async def _connect(self):
-        self.connection = await connect_robust(self.amqp_uri, loop=self.loop, timeout=self._con_time_out)
+        ssl_ = False
+        if self.ssl_options:
+            ssl_ = True
+            # For compatibility with aiprmq
+            if "ca_certs" in self.ssl_options:
+                self.ssl_options.setdefault("cafile", self.ssl_options["ca_certs"])
+            if "cert_reqs" in self.ssl_options:
+                self.ssl_options.setdefault("no_verify_ssl",
+                                            ssl.CERT_REQUIRED if self.ssl_options["cert_reqs"] == ssl.CERT_NONE
+                                            else ssl.CERT_NONE)
+            # For compatibility with yarl
+            for k , v in self.ssl_options.items():
+                if isinstance(v, Enum): self.ssl_options[k] = v.value
+
+        self.connection = await connect_robust(
+            host=self.url.host,
+            port=self.url.port,
+            login=self.url.user,
+            password=self.url.password,
+            ssl=ssl_,
+            ssl_options=self.ssl_options,
+            loop=self.loop,
+            timeout=self._con_time_out,
+            **self.url.query,
+        )
         self.channel = await self.connection.channel()
         self.exchange = await self.channel.declare_exchange(self._exchange_name or RPC_EXCHANGE_NAME,
                                                             type=ExchangeType.TOPIC,
@@ -305,7 +333,7 @@ class MethodProxy(object):
         serializer = self.cluster_proxy.serializer
         content_type, content_encoding, body = dumps(payload, serializer)
         if isinstance(body, str): body = bytes(body, content_encoding)
-        print(type(body))
+
         msg = Message(
             body,
             content_type=content_type,

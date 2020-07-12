@@ -9,12 +9,13 @@ This project is based on aio-pika and reference the source code of official name
 If you want most of your messages to be persistent(default). Set the delivery mode parameter as
 DeliveryMode.PERSISTENT, Call sw_dlm_call when you need to send a non-persistent message.
 ```python
+import ssl
 import asyncio
 from aio_nameko_proxy import AIOClusterRpcProxy
 from aio_pika import DeliveryMode
 
 config = {
-    "AMQP_URI": "pyamqp://guest:guest@127.0.0.1:5672",
+    "AMQP_URI": "amqp://guest:guest@127.0.0.1:5672",  # Required, 
     "rpc_exchange": "nameko-rpc",
     "time_out": 30, 
     "con_time_out": 5, 
@@ -22,13 +23,20 @@ config = {
     "serializer": "my_serializer",
     "ACCEPT": ["pickle", "json", "my_serializer"],
     "SERIALIZERS": {
-            "my_serializer": {
-                "encoder": "my_slizer.dumps",
-                "decoder": "my_slizer.loads",
-                "content_type": "my-content-type",
-                "content_encoding": "utf-8"
-            }
+        "my_serializer": {
+            "encoder": "my_slizer.dumps",
+            "decoder": "my_slizer.loads",
+            "content_type": "my-content-type",
+            "content_encoding": "utf-8"
         }
+    },
+    # If SSL is configured, Remember to change the URI to TLS port. eg: "amqps://guest:guest@127.0.0.1:5671"
+    "AMQP_SSL": {
+        'ca_certs': 'certs/ca_certificate.pem',  # or 'cafile': 'certs/ca_certificate.pem',
+        'certfile': 'certs/client_certificate.pem',
+        'keyfile': 'certs/client_key.pem',
+        'cert_reqs': ssl.CERT_REQUIRED
+    }
 }
 
 async def run():
@@ -123,13 +131,14 @@ if __name__ == '__main__':
 
 #### Sanic Wrapper
 ```python
+import ssl
 from sanic import Sanic
 from sanic.response import json
 from aio_pika import DeliveryMode
 from aio_nameko_proxy.wrappers import SanicNamekoClusterRpcProxy
 
 class Config(object):
-    # AMQP_URI
+    # AMQP_URI: Required
     NAMEKO_AMQP_URI = "pyamqp://guest:guest@127.0.0.1:5672"
     # rpc_exchange
     NAMEKO_RPC_EXCHANGE = "nameko-rpc"
@@ -143,9 +152,24 @@ class Config(object):
     NAMEKO_CON_TIME_OUT = 5
     # serializer
     NAMEKO_SERIALIZER = "json"
-    # 
+    # ACCEPT
     NAMEKO_ACCEPT = ["pickle", "json"]
-
+    # SERIALIZERS: custom serializers
+    NAMEKO_SERIALIZERS = {
+        "my_serializer": {
+            "encoder": "my_slizer.dumps",
+            "decoder": "my_slizer.loads",
+            "content_type": "my-content-type",
+            "content_encoding": "utf-8"
+        }
+    }
+    # AMQP_SSL: ssl configs
+    NAMEKO_AMQP_SSL = {
+        'ca_certs': 'certs/ca_certificate.pem',  # or 'cafile': 'certs/ca_certificate.pem',
+        'certfile': 'certs/client_certificate.pem',
+        'keyfile': 'certs/client_key.pem',
+        'cert_reqs': ssl.CERT_REQUIRED
+    }
     # delivery_mode
     NAMEKO_DELIVERY_MODE = DeliveryMode.PERSISTENT
     # other supported properties of aio-pika.Message, the key name format is "NAMEKO_{}".format(property_name.upper())
