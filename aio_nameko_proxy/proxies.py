@@ -37,11 +37,12 @@ class AIOPooledClusterRpcProxy(object):
         self._config = config.copy()
 
     async def init_pool(self):
-        self._pool = ProxyPool(self._make_rpc_proxy,
-                               pool_size=self.pool_size,
-                               initial_size=self.initial_size,
-                               loop=self.loop,
-                               time_out=self.con_time_out)
+        if self._pool is None:
+            self._pool = ProxyPool(self._make_rpc_proxy,
+                                   pool_size=self.pool_size,
+                                   initial_size=self.initial_size,
+                                   loop=self.loop,
+                                   time_out=self.con_time_out)
         await self._pool.init_proxies()
 
     async def _make_rpc_proxy(self):
@@ -62,8 +63,7 @@ class AIOPooledClusterRpcProxy(object):
         await asyncio.shield(self._pool.close())
 
     async def __aenter__(self):
-        if self._pool is None:
-            await self.init_pool()
+        await self.init_pool()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):

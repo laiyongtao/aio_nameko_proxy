@@ -28,10 +28,11 @@ class ProxyPool(object):
         self._time_out = time_out
 
     async def init_proxies(self):
-        self._inited = True
-        for i in range(self._initial_size):
-            proxy = await self._create_proxy()
-            self.release_proxy(proxy)
+        if not self._inited:
+            self._inited = True
+            for i in range(self._initial_size):
+                proxy = await self._create_proxy()
+                self.release_proxy(proxy)
 
     @property
     def _has_released(self):

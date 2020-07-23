@@ -5,6 +5,7 @@ import aiotask_context as ctx
 from aio_nameko_proxy import AIOPooledClusterRpcProxy
 from aio_nameko_proxy.constants import CAPITAL_CONFIG_KEYS
 
+
 class SanicNamekoClusterRpcProxy(AIOPooledClusterRpcProxy):
 
     def __init__(self, app=None):
@@ -39,9 +40,7 @@ class SanicNamekoClusterRpcProxy(AIOPooledClusterRpcProxy):
 
         @app.middleware('response')
         async def release_nameko_proxy(request, response):
-            proxy = ctx.get('_nameko_rpc_proxy', None)
-            if proxy is not None:
-                self.release_proxy(proxy)
+            self.remove()
 
     async def get_proxy(self):
         proxy = ctx.get('_nameko_rpc_proxy', None)
@@ -50,3 +49,7 @@ class SanicNamekoClusterRpcProxy(AIOPooledClusterRpcProxy):
             ctx.set('_nameko_rpc_proxy', proxy)
         return proxy
 
+    def remove(self):
+        proxy = ctx.get('_nameko_rpc_proxy', None)
+        if proxy is not None:
+            self.release_proxy(proxy)
