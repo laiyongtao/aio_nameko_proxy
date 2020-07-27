@@ -1,18 +1,28 @@
 # coding=utf-8
 from __future__ import absolute_import
 import re
+from typing import Optional
+
 import aiotask_context as ctx
 from aio_nameko_proxy import AIOPooledClusterRpcProxy
 from aio_nameko_proxy.constants import CAPITAL_CONFIG_KEYS
+try:
+    from sanic import Sanic
+except ImportError:
+    pass
 
 
 class SanicNamekoClusterRpcProxy(AIOPooledClusterRpcProxy):
 
-    def __init__(self, app=None):
+    def __init__(self,
+        app=None  # type: Optional[Sanic]
+        ):
         if app:
             self.init_app(app)
 
-    def init_app(self, app):
+    def init_app(self,
+            app  # type: Sanic
+        ):
         config = dict()
         for k, v in app.config.items():
             match = re.match(r"NAMEKO_(?P<name>.*)", k)

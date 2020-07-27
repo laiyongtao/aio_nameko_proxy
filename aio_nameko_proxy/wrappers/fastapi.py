@@ -3,7 +3,7 @@ from __future__ import absolute_import
 import re
 import asyncio
 import aiotask_context as ctx
-from typing import Union
+from typing import cast, Any
 
 from aio_nameko_proxy import AIOPooledClusterRpcProxy
 from aio_nameko_proxy.constants import CAPITAL_CONFIG_KEYS
@@ -57,15 +57,17 @@ _cluster = ContextVar("fastapi_nameko_cluster")
 class FastApiNamekoProxyMiddleware(AIOPooledClusterRpcProxy, BaseHTTPMiddleware):
 
     def __init__(self,
-                 app, # type: ASGIApp
-                 config):
+            app,  # type: ASGIApp
+            config  # type: Any
+        ):
         self.dispatch_func = self.dispatch
         self.app = app
         self.init_app(app, config)
 
     def init_app(self,
-                 app,  # type: ASGIApp
-                 config):
+            app,  # type: ASGIApp
+            config  # type: Any
+        ):
 
         _config = dict()
         for k in dir(config):
@@ -125,6 +127,5 @@ class Cluster(object):
             raise RuntimeError("Please initialize your cluster before using")
         return getattr(instance, item)
 
-ClusterType = Union[Cluster, FastApiNamekoProxyMiddleware]
 
-fastapi_rpc: ClusterType = Cluster()
+fastapi_rpc = cast(FastApiNamekoProxyMiddleware, Cluster())

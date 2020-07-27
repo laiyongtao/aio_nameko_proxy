@@ -4,13 +4,17 @@ import uuid
 import asyncio
 import ssl
 from enum import Enum
+from typing import Optional, Any
 
 import aiormq
 from yarl import URL
 from aio_pika import (connect_robust,
                       Message,
+                      IncomingMessage,
                       ExchangeType,
-                      DeliveryMode)
+                      DeliveryMode,
+                      Exchange)
+from aio_pika.types import TimeoutType
 from nameko.serialization import setup as serialization_setup
 from kombu.serialization import loads, dumps, prepare_accept_content
 
@@ -19,65 +23,9 @@ from .constants import *
 from .pool import ProxyPool
 
 
-class AIOPooledClusterRpcProxy(object):
-    _pool = None
-    _closed = False
-
-    def __init__(self, config, loop=None):
-        if not config:
-            raise ConfigError("Please provide config dict")
-        self.parse_config(config)
-        self.loop = loop
-
-    def parse_config(self, config):
-        self.pool_size = config.pop("pool_size", 5)
-        self.initial_size = config.pop("initial_size", 2)
-        self.con_time_out = config.get('con_time_out', None)
-
-        self._config = config.copy()
-
-    async def init_pool(self):
-        if self._pool is None:
-            self._pool = ProxyPool(self._make_rpc_proxy,
-                                   pool_size=self.pool_size,
-                                   initial_size=self.initial_size,
-                                   loop=self.loop,
-                                   time_out=self.con_time_out)
-        await self._pool.init_proxies()
-
-    async def _make_rpc_proxy(self):
-        cluster_rpc = AIOClusterRpcProxy(config=self._config)
-        return await cluster_rpc.start()
-
-    async def get_proxy(self):
-        if not self._pool:
-            raise ConfigError("Please inie your cluster")
-        return await self._pool.get_proxy()
-
-    def release_proxy(self, proxy):
-        if isinstance(proxy, AIOClusterRpcProxy):
-            self._pool.release_proxy(proxy)
-
-    async def close(self):
-        self._closed = True
-        await asyncio.shield(self._pool.close())
-
-    async def __aenter__(self):
-        await self.init_pool()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self._closed:
-            return
-        await self.close()
-
-    def acquire(self):
-        return self._pool.acquire()
-
-
 class AIOClusterRpcProxy(object):
 
-    def __init__(self, config, loop=None):
+    def __init__(self, config: dict, loop: Optional[asyncio.AbstractEventLoop] = None):
         if not config:
             raise ConfigError("Please provide config dict")
         self.parse_config(config)
@@ -90,7 +38,7 @@ class AIOClusterRpcProxy(object):
 
         self.reply_listener = ReplyListener(self, time_out=self._con_time_out)
 
-    def parse_config(self, config):
+    def parse_config(self, config: dict):
         if not isinstance(config, dict):
             raise ConfigError("config must be an instance of dict!")
 
@@ -124,7 +72,7 @@ class AIOClusterRpcProxy(object):
                                             ssl.CERT_REQUIRED if self.ssl_options["cert_reqs"] == ssl.CERT_NONE
                                             else ssl.CERT_NONE)
             # For compatibility with yarl
-            for k , v in self.ssl_options.items():
+            for k, v in self.ssl_options.items():
                 if isinstance(v, Enum): self.ssl_options[k] = v.value
 
         self.connection = await connect_robust(
@@ -167,13 +115,69 @@ class AIOClusterRpcProxy(object):
         return self._proxies[name]
 
 
+class AIOPooledClusterRpcProxy(object):
+    _pool = None
+    _closed = False
+
+    def __init__(self, config: dict, loop: Optional[asyncio.AbstractEventLoop] = None):
+        if not config:
+            raise ConfigError("Please provide config dict")
+        self.parse_config(config)
+        self.loop = loop
+
+    def parse_config(self, config: dict):
+        self.pool_size = config.pop("pool_size", 5)
+        self.initial_size = config.pop("initial_size", 2)
+        self.con_time_out = config.get('con_time_out', None)
+
+        self._config = config.copy()
+
+    async def init_pool(self):
+        if self._pool is None:
+            self._pool = ProxyPool(self._make_rpc_proxy,
+                                   pool_size=self.pool_size,
+                                   initial_size=self.initial_size,
+                                   loop=self.loop,
+                                   time_out=self.con_time_out)
+        await self._pool.init_proxies()
+
+    async def _make_rpc_proxy(self):
+        cluster_rpc = AIOClusterRpcProxy(config=self._config)
+        return await cluster_rpc.start()
+
+    async def get_proxy(self):
+        if not self._pool:
+            raise ConfigError("Please inie your cluster")
+        return await self._pool.get_proxy()
+
+    def release_proxy(self, proxy: AIOClusterRpcProxy):
+        if isinstance(proxy, AIOClusterRpcProxy):
+            self._pool.release_proxy(proxy)
+
+    async def close(self):
+        self._closed = True
+        await asyncio.shield(self._pool.close())
+
+    async def __aenter__(self):
+        await self.init_pool()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._closed:
+            return
+        await self.close()
+
+    def acquire(self):
+        return self._pool.acquire()
+
+
 class Publisher(object):
 
-    def __init__(self, exchange):
+    def __init__(self, exchange: Exchange):
         self.exchange = exchange
 
-    async def publish(self, msg, routing_key, *, mandatory=True,
-                      immediate=False, timeout=None):
+    async def publish(self, msg: Message, routing_key: str, *, mandatory: bool = True,
+                      immediate: bool = False, timeout: Optional[TimeoutType] = None):
         await self.exchange.publish(
             msg, routing_key, mandatory=mandatory, immediate=immediate, timeout=timeout
         )
@@ -181,7 +185,7 @@ class Publisher(object):
 
 class ReplyListener(object):
 
-    def __init__(self, cluster_proxy: AIOClusterRpcProxy, time_out=None):
+    def __init__(self, cluster_proxy: AIOClusterRpcProxy, time_out: Optional[TimeoutType] = None):
         self._reply_futures = {}
         self.cluster_proxy = cluster_proxy
         self._time_out = time_out
@@ -210,12 +214,12 @@ class ReplyListener(object):
     async def stop(self):
         await self.queue.unbind(self.exchange, self.routing_key, timeout=self._time_out)
 
-    def get_reply_future(self, correlation_id):
+    def get_reply_future(self, correlation_id: str):
         reply_future = asyncio.get_event_loop().create_future()
         self._reply_futures[correlation_id] = reply_future
         return reply_future
 
-    async def handle_message(self, message):
+    async def handle_message(self, message: IncomingMessage):
         message.ack()
 
         correlation_id = message.correlation_id
@@ -241,7 +245,8 @@ class ReplyListener(object):
 
 
 class ServiceProxy(object):
-    def __init__(self, service_name, cluster_proxy, time_out=None, con_time_out=None, **options):
+    def __init__(self, service_name: str, cluster_proxy: AIOClusterRpcProxy, time_out: Optional[TimeoutType] = None,
+                 con_time_out: Optional[TimeoutType] = None, **options):
         self.service_name = service_name
         self.cluster_proxy = cluster_proxy
         self.options = options
@@ -263,7 +268,7 @@ class ServiceProxy(object):
 class RpcReply(object):
     resp_body = None
 
-    def __init__(self, reply_future, time_out=None):
+    def __init__(self, reply_future: asyncio.Future, time_out: Optional[TimeoutType] = None):
         self.reply_future = reply_future
         self._time_out = time_out
 
@@ -280,7 +285,8 @@ class RpcReply(object):
 
 class MethodProxy(object):
 
-    def __init__(self, service_name, method_name, cluster_proxy, time_out=None, con_time_out=None,
+    def __init__(self, service_name: str, method_name: str, cluster_proxy: AIOClusterRpcProxy,
+                 time_out: Optional[TimeoutType] = None, con_time_out: Optional[TimeoutType] = None,
                  **options):
         self.cluster_proxy = cluster_proxy
         self.service_name = service_name
@@ -292,7 +298,7 @@ class MethodProxy(object):
         self._con_time_out = con_time_out
         self.publisher = Publisher(self.exchange)
 
-    def _set_default_options(self, options):
+    def _set_default_options(self, options: dict):
         _options = dict()
         for k, v in options.items():
             if (
@@ -306,7 +312,7 @@ class MethodProxy(object):
         # other options default set ...
         return _options
 
-    async def _publish(self, msg):
+    async def _publish(self, msg: Message):
         correlation_id = msg.correlation_id
         routing_key = "{}.{}".format(self.service_name, self.method_name)
         future = self.reply_listener.get_reply_future(correlation_id)
@@ -325,7 +331,7 @@ class MethodProxy(object):
         reply = await self._call(*args, **kwargs)
         return await reply.result()
 
-    def make_msg(self, payload, options):
+    def make_msg(self, payload: Any, options: dict):
 
         reply_to = self.reply_listener.routing_key
         correlation_id = str(uuid.uuid4())

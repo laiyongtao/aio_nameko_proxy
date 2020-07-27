@@ -2,19 +2,21 @@
 reference the aio-pika.pool
 '''
 import asyncio
-from aio_pika.pool import PoolInvalidStateError, ConstructorType
-from typing import Union, AsyncContextManager
-from .excs import ClientError
+from typing import AsyncContextManager, Optional
 
-NumType = Union[int, float]
+from aio_pika.types import TimeoutType
+from aio_pika.pool import PoolInvalidStateError, ConstructorType
+
+from .excs import ClientError
 
 
 class ProxyPool(object):
     _inited = False
 
     def __init__(self, proxy_factory: ConstructorType,
-                 pool_size: int = None, initial_size: int = None, time_out: NumType = None,
-                 loop: asyncio.AbstractEventLoop = None):
+                 pool_size: Optional[int] = None, initial_size: Optional[int] = None,
+                 time_out: Optional[TimeoutType] = None,
+                 loop: Optional[asyncio.AbstractEventLoop] = None):
         self.loop = loop or asyncio.get_event_loop()
         # if the origin proxy_factory need some args, you can use functools.partial or functools.partialmethod
         self._proxy_factory = proxy_factory
@@ -109,7 +111,7 @@ class ProxyPool(object):
 
 class PoolItemContextManager(AsyncContextManager):
 
-    def __init__(self, pool):
+    def __init__(self, pool: ProxyPool):
         self.pool = pool
         self.item = None
 
