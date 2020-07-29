@@ -180,6 +180,12 @@ app = Sanic("App Name")
 app.config.from_object(Config)
 
 # rpc_cluster = SanicNamekoClusterRpcProxy(app)
+
+# or
+
+# from aio_nameko_proxy.wrappers import rpc_cluster  # contextvars required in py36
+# SanicNamekoClusterRpcProxy(app)
+
 # or
 rpc_cluster = SanicNamekoClusterRpcProxy()
 rpc_cluster.init_app(app)
@@ -230,7 +236,7 @@ from fastapi import FastAPI, WebSocket
 from aio_pika import DeliveryMode
 from pydantic import BaseSettings
 
-from aio_nameko_proxy.wrappers import FastApiNamekoProxyMiddleware, rpc_cluster
+from aio_nameko_proxy.wrappers import FastApiNamekoProxyMiddleware, rpc_cluster  # contextvars required in py36
 
 
 
