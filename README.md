@@ -230,7 +230,7 @@ from fastapi import FastAPI, WebSocket
 from aio_pika import DeliveryMode
 from pydantic import BaseSettings
 
-from aio_nameko_proxy.wrappers import FastApiNamekoProxyMiddleware, fastapi_rpc
+from aio_nameko_proxy.wrappers import FastApiNamekoProxyMiddleware, rpc_cluster
 
 
 
@@ -282,7 +282,7 @@ app.add_middleware(FastApiNamekoProxyMiddleware, config=settings)
 @app.get("/")
 async def test():
     
-    rpc = await fastapi_rpc.get_proxy()
+    rpc = await rpc_cluster.get_proxy()
 
     result = await rpc.rpc_demo_service.normal_rpc("demo")
 
@@ -300,7 +300,7 @@ async def test():
 @app.websocket("/ws")
 async def ws(ws: WebSocket):
     await ws.accept()
-    rpc = await fastapi_rpc.get_proxy()
+    rpc = await rpc_cluster.get_proxy()
         
     for i in range(3):
         _ = await ws.receive()
@@ -309,5 +309,5 @@ async def ws(ws: WebSocket):
     ws.close()
     
     # in websocket handlers, you should call the remove() actively in the end
-    fastapi_rpc.remove()
+    rpc_cluster.remove()
 ```

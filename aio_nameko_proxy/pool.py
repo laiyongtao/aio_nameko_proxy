@@ -2,7 +2,7 @@
 reference the aio-pika.pool
 '''
 import asyncio
-from typing import AsyncContextManager, Optional
+from typing import AsyncContextManager, Optional, Any
 
 from aio_pika.types import TimeoutType
 from aio_pika.pool import PoolInvalidStateError, ConstructorType
@@ -29,7 +29,7 @@ class ProxyPool(object):
         self._initial_size = initial_size or 0
         self._time_out = time_out
 
-    async def init_proxies(self):
+    async def init_proxies(self) -> None:
         if not self._inited:
             self._inited = True
             for i in range(self._initial_size):
@@ -37,7 +37,7 @@ class ProxyPool(object):
                 self.release_proxy(proxy)
 
     @property
-    def _has_released(self):
+    def _has_released(self) -> bool:
         return self._free_proxies.qsize() > 0
 
     @property
@@ -46,7 +46,7 @@ class ProxyPool(object):
             return self._created >= self._pool_size or self._has_released
         return self._has_released
 
-    async def _create_proxy(self):
+    async def _create_proxy(self) -> Any:
         if self._closed:
             raise PoolInvalidStateError('create proxy operation on closed pool')
 
@@ -65,7 +65,7 @@ class ProxyPool(object):
             self._created_proxies.add(proxy)
             return proxy
 
-    async def get_proxy(self):
+    async def get_proxy(self) -> Any:
         if self._closed:
             raise PoolInvalidStateError('get operation on closed pool')
         if self._is_overflow:
@@ -78,12 +78,12 @@ class ProxyPool(object):
             return await self._free_proxies.get()
         return await self._create_proxy()
 
-    def release_proxy(self, proxy):
+    def release_proxy(self, proxy: Any) -> None:
         if self._closed:
             raise PoolInvalidStateError('put proxy operation on closed pool')
         self._free_proxies.put_nowait(proxy)
 
-    async def close(self):
+    async def close(self) -> None:
         async with self._lock:
             self._closed = True
             tasks = []
@@ -94,7 +94,7 @@ class ProxyPool(object):
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "ProxyPool":
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -115,7 +115,7 @@ class PoolItemContextManager(AsyncContextManager):
         self.pool = pool
         self.item = None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> Any:
         # noinspection PyProtectedMember
         self.item = await self.pool.get_proxy()
         return self.item

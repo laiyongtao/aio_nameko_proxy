@@ -20,7 +20,7 @@ from kombu.serialization import loads, dumps, prepare_accept_content
 
 from .excs import ConfigError, deserialize
 from .constants import *
-from .pool import ProxyPool
+from .pool import ProxyPool, PoolItemContextManager
 
 
 class AIOClusterRpcProxy(object):
@@ -38,7 +38,7 @@ class AIOClusterRpcProxy(object):
 
         self.reply_listener = ReplyListener(self, time_out=self._con_time_out)
 
-    def parse_config(self, config: dict):
+    def parse_config(self, config: dict) -> None:
         if not isinstance(config, dict):
             raise ConfigError("config must be an instance of dict!")
 
@@ -60,7 +60,7 @@ class AIOClusterRpcProxy(object):
         self.ssl_options = _config.pop(AMQP_SSL_CONFIG_KEY, {})
         self.options = _config
 
-    async def _connect(self):
+    async def _connect(self) -> None:
         ssl_ = False
         if self.ssl_options:
             ssl_ = True
@@ -92,16 +92,16 @@ class AIOClusterRpcProxy(object):
                                                             durable=True,
                                                             timeout=self._con_time_out)
 
-    async def start(self):
+    async def start(self) -> "AIOClusterRpcProxy":
         await self._connect()
         await self.reply_listener.setup()
         return self
 
-    async def close(self):
+    async def close(self) -> None:
         await self.reply_listener.stop()
         await self.connection.close()
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "AIOClusterRpcProxy":
         if not self.connection:
             await self.start()
         return self
@@ -109,7 +109,7 @@ class AIOClusterRpcProxy(object):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.close()
 
-    def __getattr__(self, name):
+    def __getattr__(self, name) -> "ServiceProxy":
         if name not in self._proxies:
             self._proxies[name] = ServiceProxy(name, self, **self.options)
         return self._proxies[name]
@@ -125,14 +125,14 @@ class AIOPooledClusterRpcProxy(object):
         self.parse_config(config)
         self.loop = loop
 
-    def parse_config(self, config: dict):
+    def parse_config(self, config: dict) -> None:
         self.pool_size = config.pop("pool_size", 5)
         self.initial_size = config.pop("initial_size", 2)
         self.con_time_out = config.get('con_time_out', None)
 
         self._config = config.copy()
 
-    async def init_pool(self):
+    async def init_pool(self) -> None:
         if self._pool is None:
             self._pool = ProxyPool(self._make_rpc_proxy,
                                    pool_size=self.pool_size,
@@ -141,7 +141,7 @@ class AIOPooledClusterRpcProxy(object):
                                    time_out=self.con_time_out)
         await self._pool.init_proxies()
 
-    async def _make_rpc_proxy(self):
+    async def _make_rpc_proxy(self) -> "AIOClusterRpcProxy":
         cluster_rpc = AIOClusterRpcProxy(config=self._config)
         return await cluster_rpc.start()
 
@@ -150,11 +150,11 @@ class AIOPooledClusterRpcProxy(object):
             raise ConfigError("Please inie your cluster")
         return await self._pool.get_proxy()
 
-    def release_proxy(self, proxy: AIOClusterRpcProxy):
+    def release_proxy(self, proxy: "AIOClusterRpcProxy") -> None:
         if isinstance(proxy, AIOClusterRpcProxy):
             self._pool.release_proxy(proxy)
 
-    async def close(self):
+    async def close(self) -> None:
         self._closed = True
         await asyncio.shield(self._pool.close())
 
@@ -167,7 +167,7 @@ class AIOPooledClusterRpcProxy(object):
             return
         await self.close()
 
-    def acquire(self):
+    def acquire(self) -> PoolItemContextManager:
         return self._pool.acquire()
 
 
@@ -177,7 +177,7 @@ class Publisher(object):
         self.exchange = exchange
 
     async def publish(self, msg: Message, routing_key: str, *, mandatory: bool = True,
-                      immediate: bool = False, timeout: Optional[TimeoutType] = None):
+                      immediate: bool = False, timeout: Optional[TimeoutType] = None) -> None:
         await self.exchange.publish(
             msg, routing_key, mandatory=mandatory, immediate=immediate, timeout=timeout
         )
@@ -190,7 +190,7 @@ class ReplyListener(object):
         self.cluster_proxy = cluster_proxy
         self._time_out = time_out
 
-    async def setup(self):
+    async def setup(self) -> None:
 
         reply_queue_uuid = uuid.uuid4()
         service_name = self.cluster_proxy.virtual_service_name
@@ -211,15 +211,15 @@ class ReplyListener(object):
         await self.queue.bind(self.exchange, self.routing_key, timeout=self._time_out)
         await self.queue.consume(self.handle_message, timeout=self._time_out)
 
-    async def stop(self):
+    async def stop(self) -> None:
         await self.queue.unbind(self.exchange, self.routing_key, timeout=self._time_out)
 
-    def get_reply_future(self, correlation_id: str):
+    def get_reply_future(self, correlation_id: str) -> asyncio.Future:
         reply_future = asyncio.get_event_loop().create_future()
         self._reply_futures[correlation_id] = reply_future
         return reply_future
 
-    async def handle_message(self, message: IncomingMessage):
+    async def handle_message(self, message: IncomingMessage) -> None:
         message.ack()
 
         correlation_id = message.correlation_id
@@ -254,7 +254,7 @@ class ServiceProxy(object):
         self._con_time_out = con_time_out
         self._proxies = {}
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> "MethodProxy":
         if name not in self._proxies:
             self._proxies[name] = MethodProxy(self.service_name,
                                               name,
@@ -272,7 +272,7 @@ class RpcReply(object):
         self.reply_future = reply_future
         self._time_out = time_out
 
-    async def result(self):
+    async def result(self) -> Any:
 
         if self.resp_body is None:
             self.resp_body = await asyncio.wait_for(self.reply_future,
@@ -298,7 +298,7 @@ class MethodProxy(object):
         self._con_time_out = con_time_out
         self.publisher = Publisher(self.exchange)
 
-    def _set_default_options(self, options: dict):
+    def _set_default_options(self, options: dict) -> dict:
         _options = dict()
         for k, v in options.items():
             if (
@@ -312,7 +312,7 @@ class MethodProxy(object):
         # other options default set ...
         return _options
 
-    async def _publish(self, msg: Message):
+    async def _publish(self, msg: Message) -> "RpcReply":
         correlation_id = msg.correlation_id
         routing_key = "{}.{}".format(self.service_name, self.method_name)
         future = self.reply_listener.get_reply_future(correlation_id)
@@ -324,14 +324,14 @@ class MethodProxy(object):
         )
         return RpcReply(future)
 
-    async def call_async(self, *args, **kwargs):
+    async def call_async(self, *args, **kwargs) -> "RpcReply":
         return await self._call(*args, **kwargs)
 
-    async def __call__(self, *args, **kwargs):
+    async def __call__(self, *args, **kwargs) -> Any:
         reply = await self._call(*args, **kwargs)
         return await reply.result()
 
-    def make_msg(self, payload: Any, options: dict):
+    def make_msg(self, payload: Any, options: dict) -> Message:
 
         reply_to = self.reply_listener.routing_key
         correlation_id = str(uuid.uuid4())
@@ -350,30 +350,30 @@ class MethodProxy(object):
         )
         return msg
 
-    async def _call(self, *args, **kwargs):
+    async def _call(self, *args, **kwargs) -> "RpcReply":
 
         payload = {"args": args, "kwargs": kwargs}
         msg = self.make_msg(payload, options=self.options)
 
         return await self._publish(msg)
 
-    async def sw_dlm_call(self, *args, **kwargs):
+    async def sw_dlm_call(self, *args, **kwargs) -> Any:
         '''switch from the default delivery_mode of the Message to another, and call the remote method'''
         reply = await self._sw_call(*args, **kwargs)
         return await reply.result()
 
-    async def sw_dlm_call_async(self, *args, **kwargs):
+    async def sw_dlm_call_async(self, *args, **kwargs) -> "RpcReply":
         '''switch from the default delivery_mode of the Message to another, and call the remote method async'''
         return await self._sw_call(*args, **kwargs)
 
-    def _switch_delivery_mode(self, delivery_mode):
+    def _switch_delivery_mode(self, delivery_mode: DeliveryMode) -> DeliveryMode:
         '''switch from the default delivery_mode to another'''
         if delivery_mode == DeliveryMode.NOT_PERSISTENT:
             return DeliveryMode.PERSISTENT
         else:
             return DeliveryMode.NOT_PERSISTENT
 
-    async def _sw_call(self, *args, **kwargs):
+    async def _sw_call(self, *args, **kwargs) -> "RpcReply":
         '''switch from the default delivery_mode of the Message to another, and publish'''
         options = self.options.copy()
         delivery_mode = self._switch_delivery_mode(options["delivery_mode"])

@@ -9,28 +9,10 @@ from aio_nameko_proxy import AIOPooledClusterRpcProxy
 from aio_nameko_proxy.constants import CAPITAL_CONFIG_KEYS
 
 try:
-    from contextvars import ContextVar
-except ImportError:
-    class ContextVar(object):
-        '''Fake contextvars.ContextVar'''
-
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def _miss(self, *args, **kwargs):
-            raise RuntimeError("contextvars is not installed")
-
-        @property
-        def name(self):
-            return self._miss()
-
-        get = set = reset = _miss
-        del _miss
-
-try:
-    from starlette.middleware.base import BaseHTTPMiddleware
-    from starlette.routing import Router
+    from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
     from starlette.applications import ASGIApp
+    from starlette.requests import Request
+    from starlette.responses import Response
 except ImportError:
     class BaseHTTPMiddleware(object):
         '''Fake starlette.middleware.base.BaseHTTPMiddleware'''
@@ -41,33 +23,17 @@ except ImportError:
         call_next = __call__ = dispatch = _miss
         del _miss
 
-    class Router(object):
-        '''Fake starlette.routing.Router'''
-
-        def _miss(self, *args, **kwargs):
-            raise RuntimeError("starlette is not installed")
-
-        on_event = _miss
-        del _miss
-
-
-_cluster = ContextVar("fastapi_nameko_cluster")
+from . import rpc_cluster
 
 
 class FastApiNamekoProxyMiddleware(AIOPooledClusterRpcProxy, BaseHTTPMiddleware):
 
-    def __init__(self,
-            app,  # type: ASGIApp
-            config  # type: Any
-        ):
+    def __init__(self, app: "ASGIApp", config: "Any"):
         self.dispatch_func = self.dispatch
         self.app = app
         self.init_app(app, config)
 
-    def init_app(self,
-            app,  # type: ASGIApp
-            config  # type: Any
-        ):
+    def init_app(self, app: "ASGIApp", config: "Any") -> None:
 
         _config = dict()
         for k in dir(config):
@@ -80,8 +46,7 @@ class FastApiNamekoProxyMiddleware(AIOPooledClusterRpcProxy, BaseHTTPMiddleware)
                 _config[name.lower()] = getattr(config, k)
         self.parse_config(_config)
 
-        while not isinstance(app, Router):
-            print("app", app)
+        while hasattr(app, "app"):
             app = app.app
 
         @app.on_event("startup")
@@ -98,7 +63,7 @@ class FastApiNamekoProxyMiddleware(AIOPooledClusterRpcProxy, BaseHTTPMiddleware)
         async def _close_proxy_pool():
             await self.close()
 
-        _cluster.set(self)
+        rpc_cluster._set(self)
 
     async def get_proxy(self):
         proxy = ctx.get('_nameko_rpc_proxy', None)
@@ -107,25 +72,14 @@ class FastApiNamekoProxyMiddleware(AIOPooledClusterRpcProxy, BaseHTTPMiddleware)
             ctx.set('_nameko_rpc_proxy', proxy)
         return proxy
 
-    def remove(self):
+    def remove(self) -> None:
         proxy = ctx.get('_nameko_rpc_proxy', None)
         if proxy is not None:
             self.release_proxy(proxy)
 
-    async def dispatch(self, request, call_next):
+    async def dispatch(self, request: "Request", call_next: "RequestResponseEndpoint") -> "Response":
         try:
             response = await call_next(request)
         finally:
             self.remove()
         return response
-
-
-class Cluster(object):
-    def __getattr__(self, item):
-        instance = _cluster.get(None)
-        if not instance:
-            raise RuntimeError("Please initialize your cluster before using")
-        return getattr(instance, item)
-
-
-fastapi_rpc = cast(FastApiNamekoProxyMiddleware, Cluster())

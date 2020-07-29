@@ -11,18 +11,15 @@ try:
 except ImportError:
     pass
 
+from . import rpc_cluster
 
 class SanicNamekoClusterRpcProxy(AIOPooledClusterRpcProxy):
 
-    def __init__(self,
-        app=None  # type: Optional[Sanic]
-        ):
+    def __init__(self, app: Optional["Sanic"]=None):
         if app:
             self.init_app(app)
 
-    def init_app(self,
-            app  # type: Sanic
-        ):
+    def init_app(self, app: "Sanic") -> None:
         config = dict()
         for k, v in app.config.items():
             match = re.match(r"NAMEKO_(?P<name>.*)", k)
@@ -52,6 +49,8 @@ class SanicNamekoClusterRpcProxy(AIOPooledClusterRpcProxy):
         async def release_nameko_proxy(request, response):
             self.remove()
 
+        rpc_cluster._set(self)
+
     async def get_proxy(self):
         proxy = ctx.get('_nameko_rpc_proxy', None)
         if not proxy:
@@ -59,7 +58,7 @@ class SanicNamekoClusterRpcProxy(AIOPooledClusterRpcProxy):
             ctx.set('_nameko_rpc_proxy', proxy)
         return proxy
 
-    def remove(self):
+    def remove(self) -> None:
         proxy = ctx.get('_nameko_rpc_proxy', None)
         if proxy is not None:
             self.release_proxy(proxy)
