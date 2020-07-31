@@ -243,7 +243,7 @@ from aio_nameko_proxy.wrappers import FastApiNamekoProxyMiddleware, rpc_cluster 
 class Settings(BaseSettings):
 
     # AMQP_URI: Required
-    NAMEKO_AMQP_URI = "pyamqp://lcsuo:lcsuo123@192.168.5.105:5672"
+    NAMEKO_AMQP_URI = "pyamqp://guest:guest@127.0.0.1:5672"
     # rpc_exchange
     NAMEKO_RPC_EXCHANGE = "nameko-rpc"
     # pool_size
