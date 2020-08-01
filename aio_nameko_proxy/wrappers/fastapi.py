@@ -3,7 +3,7 @@ from __future__ import absolute_import
 import re
 import asyncio
 import aiotask_context as ctx
-from typing import cast, Any
+from typing import Any
 
 from aio_nameko_proxy import AIOPooledClusterRpcProxy
 from aio_nameko_proxy.constants import CAPITAL_CONFIG_KEYS
