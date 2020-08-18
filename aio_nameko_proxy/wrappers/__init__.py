@@ -1,4 +1,6 @@
 # coding=utf-8
+from aio_nameko_proxy import AIOClusterRpcProxy
+from aio_nameko_proxy.pool import PoolItemContextManager
 try:
     from contextvars import ContextVar
 except ImportError:
@@ -40,6 +42,12 @@ class _ForHint:
         pass
 
     def remove(self) -> None:
+        pass
+
+    def release_proxy(self, proxy: "AIOClusterRpcProxy") -> None:
+        pass
+
+    def acquire(self) -> PoolItemContextManager:
         pass
 
 from typing import cast
