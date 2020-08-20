@@ -3,7 +3,10 @@
 A standalone nameko rpc proxy for asyncio and some wrappers for using nameko rpc proxy with asynchronous web frameworks(Sanic, fastapi). 
 
 This project is based on aio-pika and reference the source code of official nameko project and aio-pika.
-
+### install
+```shell
+pip install aio-nameko-proxy
+```
 ### examples:
 #### standalone AIOClusterRpcProxy
 If you want most of your messages to be persistent(default). Set the delivery mode parameter as
