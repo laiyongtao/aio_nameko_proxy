@@ -266,11 +266,12 @@ class ServiceProxy(object):
 
 
 class RpcReply(object):
-    resp_body = None
+    __slots__ = ("resp_body", "reply_future", "_time_out")
 
     def __init__(self, reply_future: asyncio.Future, time_out: Optional[TimeoutType] = None):
         self.reply_future = reply_future
         self._time_out = time_out
+        self.resp_body = None
 
     async def result(self) -> Any:
 
