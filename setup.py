@@ -11,7 +11,7 @@ desc = '''A standalone nameko rpc proxy for asyncio and a wrapper for using name
 
 setup(
     name="aio-nameko-proxy",
-    version="1.3.0",
+    version="1.3.1",
     author="laiyongtao",
     author_email="laiyongtao6908@163.com",
     url="https://github.com/laiyongtao/aio_nameko_proxy" ,
