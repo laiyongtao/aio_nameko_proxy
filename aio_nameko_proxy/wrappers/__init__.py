@@ -1,41 +1,29 @@
 # coding=utf-8
+import logging
 from aio_nameko_proxy import AIOClusterRpcProxy
 from aio_nameko_proxy.pool import PoolItemContextManager
-try:
-    from contextvars import ContextVar
-except ImportError:
-    class ContextVar(object):
-        '''Fake contextvars.ContextVar'''
-
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def _miss(self, *args, **kwargs):
-            raise RuntimeError("contextvars is not installed")
-
-        @property
-        def name(self):
-            return self._miss()
-
-        get = set = reset = _miss
-        del _miss
 
 
 class _Cluster(object):
-    def __init__(self, ctx: "ContextVar"):
-        self.ctx = ctx
-        self.token = None
+
+    def __init__(self):
+        self.instance = None
 
     def _set(self, obj):
-        if self.token is not None:
-            self.ctx.reset(self.token)
-        self.token = self.ctx.set(obj)
+        if self.instance is None:
+            self.instance = obj
+            return
+        if type(self.instance) == type(obj):
+            return
+
+        self.instance = obj
+        logging.warning("Reset the cluster instance from {} to {}!".format(type(self.instance), type(obj)))
 
     def __getattr__(self, name):
-        instance = self.ctx.get(None)
-        if not instance:
+        if not self.instance:
             raise RuntimeError("Please initialize your cluster before using")
-        return getattr(instance, name)
+        return getattr(self.instance, name)
+
 
 class _ForHint:
     async def get_proxy(self):
@@ -50,10 +38,10 @@ class _ForHint:
     def acquire(self) -> PoolItemContextManager:
         pass
 
+
 from typing import cast
 
-__rpc_cluster = ContextVar("nameko_cluster")
-rpc_cluster = cast(_ForHint, _Cluster(__rpc_cluster))
+rpc_cluster = cast(_ForHint, _Cluster())
 
 from .sanic import SanicNamekoClusterRpcProxy
 from .fastapi import FastApiNamekoProxyMiddleware
